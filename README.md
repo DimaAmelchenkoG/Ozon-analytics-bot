@@ -16,6 +16,11 @@ pip install -r requirements.txt
 1. Скопируйте `.env.example` в `.env`
 2. Вставьте токен от BotFather в `TELEGRAM_BOT_TOKEN`
 3. Проверьте `BACKEND_URL` (по умолчанию `http://127.0.0.1:8000/ask`)
+4. Для Google Sheets задайте:
+   - `GOOGLE_CREDENTIALS_JSON_PATH` - путь к JSON сервисного аккаунта
+   - `GOOGLE_SHEETS_ID` - ID таблицы из URL
+   - `GOOGLE_SHEETS_WORKSHEET` - лист (обычно `Sheet1`)
+5. Откройте таблицу и дайте доступ сервисному аккаунту (email из JSON) как Viewer/Editor
 
 ## 3) Запуск backend (окно терминала #1)
 
@@ -33,5 +38,5 @@ pip install -r requirements.txt
 
 - `/start` показывает приветствие и пример запроса
 - Бот отправляет запрос на backend (`POST /ask`)
-- Backend возвращает текстовый ответ-заглушку
+- Backend на любой запрос читает первую строку Google Sheets и возвращает ее
 
