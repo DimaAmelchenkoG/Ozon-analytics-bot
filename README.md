@@ -21,6 +21,10 @@ pip install -r requirements.txt
    - `GOOGLE_SHEETS_ID` - ID таблицы из URL
    - `GOOGLE_SHEETS_WORKSHEET` - лист (обычно `Sheet1`)
 5. Откройте таблицу и дайте доступ сервисному аккаунту (email из JSON) как Viewer/Editor
+6. Для Ozon задайте:
+   - `OZON_CLIENT_ID`
+   - `OZON_API_KEY`
+   - `OZON_BASE_URL` (обычно `https://api-seller.ozon.ru`)
 
 ## 3) Запуск backend (окно терминала #1)
 
@@ -38,5 +42,7 @@ pip install -r requirements.txt
 
 - `/start` показывает приветствие и пример запроса
 - Бот отправляет запрос на backend (`POST /ask`)
-- Backend на любой запрос читает первую строку Google Sheets и возвращает ее
+- Backend на любой запрос:
+  - читает первую строку Google Sheets
+  - запрашивает 1 товар из Ozon кабинета и возвращает краткую информацию
 

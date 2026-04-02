@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 from services.google_sheets import get_first_row_from_sheet
+from services.ozon_api import get_ozon_cabinet_info
 
 
 app = FastAPI(title="Ozon Analytics Backend MVP")
@@ -34,10 +35,16 @@ async def ask(request: AskRequest) -> AskResponse:
     except Exception as exc:
         first_row_text = f"Ошибка чтения Google Sheets: {exc}"
 
+    try:
+        ozon_text = get_ozon_cabinet_info()
+    except Exception as exc:
+        ozon_text = f"Ошибка чтения Ozon API: {exc}"
+
     answer = (
         f"Запрос принят сервером в {now}.\n"
         f"User ID: {request.user_id}\n"
         f"Текст: {request.text}\n\n"
-        f"Первая строка Google Sheets:\n{first_row_text}"
+        f"Первая строка Google Sheets:\n{first_row_text}\n\n"
+        f"Информация из Ozon:\n{ozon_text}"
     )
     return AskResponse(answer=answer)
