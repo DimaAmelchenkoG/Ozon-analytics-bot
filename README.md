@@ -25,6 +25,10 @@ pip install -r requirements.txt
    - `OZON_CLIENT_ID`
    - `OZON_API_KEY`
    - `OZON_BASE_URL` (обычно `https://api-seller.ozon.ru`)
+7. Для нейросети задайте:
+   - `LLM_API_KEY`
+   - `LLM_MODEL` (например `gpt-4o-mini`)
+   - `LLM_BASE_URL` (по умолчанию `https://api.openai.com/v1`)
 
 ## 3) Запуск backend (окно терминала #1)
 
@@ -45,4 +49,6 @@ pip install -r requirements.txt
 - Backend на любой запрос:
   - читает первую строку Google Sheets
   - запрашивает 1 товар из Ozon кабинета и возвращает краткую информацию
+  - отправляет текст запроса в нейросеть и возвращает ее ответ
+- Тест LLM: `GET http://127.0.0.1:8000/llm-test`
 
