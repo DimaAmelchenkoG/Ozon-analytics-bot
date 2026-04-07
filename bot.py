@@ -30,15 +30,15 @@ dp = Dispatcher()
 @dp.message(CommandStart())
 async def on_start(message: Message) -> None:
     await message.answer(
-        "Привет! Я принимаю запросы по аналитике.\n"
-        "Напиши, например: 'Сколько товаров я продал сегодня?'\n\n"
-        "Теперь я отправляю запрос на backend."
+        "Привет! Отправь свой запрос одним сообщением — "
+        "я передам его на сервер, нейросеть ответит, и ты получишь ответ здесь.\n\n"
+        "Например: «Сколько товаров я продал сегодня?»"
     )
 
 
 async def send_to_backend(user_id: str, text: str) -> str:
     payload = {"user_id": str(user_id), "text": text}
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(BACKEND_URL, json=payload)
         response.raise_for_status()
         data = response.json()

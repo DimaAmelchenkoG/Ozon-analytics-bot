@@ -1,12 +1,8 @@
-from datetime import datetime
-
 from fastapi import FastAPI
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-from services.google_sheets import get_first_row_from_sheet
 from services.llm import ask_llm
-from services.ozon_api import get_ozon_cabinet_info
 
 
 app = FastAPI(title="Ozon Analytics Backend MVP")
@@ -39,29 +35,8 @@ async def llm_test() -> dict[str, str]:
 
 @app.post("/ask", response_model=AskResponse)
 async def ask(request: AskRequest) -> AskResponse:
-    now = datetime.now().strftime("%d.%m.%Y %H:%M")
     try:
-        first_row = get_first_row_from_sheet()
-        first_row_text = " | ".join(first_row) if first_row else "(первая строка пустая)"
+        answer = ask_llm(request.text)
     except Exception as exc:
-        first_row_text = f"Ошибка чтения Google Sheets: {exc}"
-
-    try:
-        ozon_text = get_ozon_cabinet_info()
-    except Exception as exc:
-        ozon_text = f"Ошибка чтения Ozon API: {exc}"
-
-    try:
-        llm_text = ask_llm(request.text)
-    except Exception as exc:
-        llm_text = f"Ошибка LLM: {exc}"
-
-    answer = (
-        f"Запрос принят сервером в {now}.\n"
-        f"User ID: {request.user_id}\n"
-        f"Текст: {request.text}\n\n"
-        f"Первая строка Google Sheets:\n{first_row_text}\n\n"
-        f"Информация из Ozon:\n{ozon_text}\n\n"
-        f"Ответ нейросети:\n{llm_text}"
-    )
+        answer = f"Не удалось получить ответ нейросети: {exc}"
     return AskResponse(answer=answer)
