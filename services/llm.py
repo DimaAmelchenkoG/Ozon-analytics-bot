@@ -11,18 +11,17 @@ def ask_llm(prompt: str) -> str:
     if not api_key:
         raise RuntimeError("Set LLM_API_KEY in .env")
 
-    url = f"{base_url}/chat/completions"
+    url = f"{base_url}/responses"
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+
     payload = {
         "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": "Отвечай кратко и по делу на русском языке.",
-            },
+        "input": [
+            {"role": "system", "content": "Отвечай кратко и по делу на русском языке."},
             {"role": "user", "content": prompt},
         ],
         "temperature": 0.2,
@@ -31,4 +30,5 @@ def ask_llm(prompt: str) -> str:
     response = httpx.post(url, headers=headers, json=payload, timeout=30.0)
     response.raise_for_status()
     data = response.json()
-    return data["choices"][0]["message"]["content"].strip()
+
+    return data["output"][0]["content"][0]["text"].strip()
