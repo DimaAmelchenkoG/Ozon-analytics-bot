@@ -1,7 +1,11 @@
-"""Тестовый HTTP-сервер: при запуске один раз тянет отчёт аналитики Ozon за «сегодня» и пишет в файлы."""
+"""Тестовый HTTP-сервер: при запуске тянет аналитику Ozon за интервал «тот же день прошлого месяца → сегодня».
+
+Пример: при «сегодня» 08.04.2026 период 08.03.2026–08.04.2026 (включительно).
+"""
 
 from __future__ import annotations
 
+import calendar
 import json
 import os
 from contextlib import asynccontextmanager
@@ -13,7 +17,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from zoneinfo import ZoneInfo
 
-from services.ozon_api import get_sales_for_day
+from services.ozon_api import get_sales_for_period
 
 
 load_dotenv()
@@ -22,26 +26,46 @@ OUTPUT_DIR = Path(os.getenv("OZON_TEST_OUTPUT_DIR", "var"))
 _last_fetch: dict[str, Any] = {}
 
 
-def _today_in_sales_tz() -> tuple[str, date]:
+def _today_in_sales_tz() -> date:
     tz_name = os.getenv("OZON_SALES_TZ", "Europe/Moscow")
-    tz = ZoneInfo(tz_name)
-    now_local = datetime.now(tz)
-    return tz_name, now_local.date()
+    return datetime.now(ZoneInfo(tz_name)).date()
 
 
-def _write_sales_files(sales_date: date, report: dict[str, Any]) -> Path:
+def _same_day_previous_month(d: date) -> date:
+    """Тот же календарный день в прошлом месяце (день режется, если в месяце меньше дней)."""
+    if d.month == 1:
+        y, m = d.year - 1, 12
+    else:
+        y, m = d.year, d.month - 1
+    last_day = calendar.monthrange(y, m)[1]
+    return date(y, m, min(d.day, last_day))
+
+
+def _rolling_month_window_to_today(today: date) -> tuple[date, date]:
+    """Интервал [начало; сегодня]: с того же числа прошлого месяца по ``today`` включительно."""
+    start = _same_day_previous_month(today)
+    return start, today
+
+
+def _write_sales_files(
+    date_from: date,
+    date_to: date,
+    report: dict[str, Any],
+) -> Path:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     rows = report.get("rows") or []
     payload: dict[str, Any] = {
         "fetched_at_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "sales_date": sales_date.isoformat(),
+        "period_start": date_from.isoformat(),
+        "period_end": date_to.isoformat(),
         "source": "ozon_v1_analytics_data",
         "api": "POST /v1/analytics/data",
         "count": len(rows),
         "report": report,
     }
     text = json.dumps(payload, ensure_ascii=False, indent=2)
-    dated_path = OUTPUT_DIR / f"ozon_sales_{sales_date.isoformat()}.json"
+    stem = f"{date_from.isoformat()}_{date_to.isoformat()}"
+    dated_path = OUTPUT_DIR / f"ozon_sales_{stem}.json"
     latest_path = OUTPUT_DIR / "ozon_sales_latest.json"
     dated_path.write_text(text, encoding="utf-8")
     latest_path.write_text(text, encoding="utf-8")
@@ -51,15 +75,19 @@ def _write_sales_files(sales_date: date, report: dict[str, Any]) -> Path:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _last_fetch
-    tz_name, day = _today_in_sales_tz()
+    tz_name = os.getenv("OZON_SALES_TZ", "Europe/Moscow")
+    today = _today_in_sales_tz()
+    date_from, date_to = _rolling_month_window_to_today(today)
     try:
-        report = get_sales_for_day(day)
-        path = _write_sales_files(day, report)
+        report = get_sales_for_period(date_from, date_to)
+        path = _write_sales_files(date_from, date_to, report)
         rows = report.get("rows") or []
         _last_fetch = {
             "ok": True,
             "timezone": tz_name,
-            "sales_date": day.isoformat(),
+            "reference_today": today.isoformat(),
+            "period_start": date_from.isoformat(),
+            "period_end": date_to.isoformat(),
             "row_count": len(rows),
             "file": str(path),
             "latest": str(OUTPUT_DIR / "ozon_sales_latest.json"),
@@ -68,13 +96,18 @@ async def lifespan(app: FastAPI):
         _last_fetch = {
             "ok": False,
             "timezone": tz_name,
-            "sales_date": day.isoformat(),
+            "reference_today": today.isoformat(),
+            "period_start": date_from.isoformat(),
+            "period_end": date_to.isoformat(),
             "error": str(exc),
         }
     yield
 
 
-app = FastAPI(title="Ozon test server (analytics dump on startup)", lifespan=lifespan)
+app = FastAPI(
+    title="Ozon test server (rolling month-to-date window on startup)",
+    lifespan=lifespan,
+)
 
 
 @app.get("/health")
@@ -85,6 +118,6 @@ async def health() -> dict[str, Any]:
 @app.get("/")
 async def root() -> dict[str, Any]:
     return {
-        "message": "Тестовый сервер. При старте — выгрузка аналитики Ozon за сегодня в var/*.json",
+        "message": "Тестовый сервер. При старте — аналитика с того же числа прошлого месяца по сегодня (OZON_SALES_TZ).",
         "startup_ozon_fetch": _last_fetch,
     }

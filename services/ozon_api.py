@@ -46,27 +46,27 @@ def _extract_analytics_rows(body: dict[str, Any]) -> tuple[list[dict[str, Any]],
     return [], None
 
 
-def get_sales_for_day(
-    day: date,
+def get_sales_for_period(
+    date_from: date,
+    date_to: date,
     *,
     metrics: list[str] | None = None,
     dimensions: list[str] | None = None,
     filters: list[dict[str, Any]] | None = None,
     sort: list[dict[str, Any]] | None = None,
     page_limit: int = 1000,
-    timeout: float = 60.0,
+    timeout: float = 120.0,
 ) -> dict[str, Any]:
-    """Аналитика продаж за один день через **POST /v1/analytics/data** (как «Моя аналитика» в ЛК).
+    """Аналитика продаж за интервал [``date_from``, ``date_to``] через **POST /v1/analytics/data**.
 
-    Для одного календарного дня: ``date_from`` = ``date_to`` = ``YYYY-MM-DD``.
-
-    По умолчанию метрики ``revenue``, ``ordered_units`` и группировка ``sku``, ``day``.
-
-    Переопределение через env: ``OZON_ANALYTICS_METRICS``, ``OZON_ANALYTICS_DIMENSION`` (через запятую).
+    Границы включительно, в формате календарных дат ``YYYY-MM-DD`` (как в ЛК Ozon).
 
     Returns:
         ``date_from``, ``date_to``, ``metrics``, ``dimension``, ``rows``, ``totals``.
     """
+    if date_from > date_to:
+        raise ValueError("date_from must be <= date_to")
+
     client_id, api_key, base_url = _ozon_client_config()
     url = f"{base_url}/v1/analytics/data"
 
@@ -81,7 +81,8 @@ def get_sales_for_day(
     f = filters if filters is not None else []
     s = sort if sort is not None else []
 
-    day_str = day.isoformat()
+    ds = date_from.isoformat()
+    de = date_to.isoformat()
     limit = max(1, min(page_limit, 1000))
 
     headers = _ozon_headers(client_id, api_key)
@@ -91,8 +92,8 @@ def get_sales_for_day(
 
     while True:
         payload: dict[str, Any] = {
-            "date_from": day_str,
-            "date_to": day_str,
+            "date_from": ds,
+            "date_to": de,
             "metrics": m,
             "dimension": d,
             "filters": f,
@@ -112,13 +113,36 @@ def get_sales_for_day(
         offset += limit
 
     return {
-        "date_from": day_str,
-        "date_to": day_str,
+        "date_from": ds,
+        "date_to": de,
         "metrics": m,
         "dimension": d,
         "rows": all_rows,
         "totals": totals,
     }
+
+
+def get_sales_for_day(
+    day: date,
+    *,
+    metrics: list[str] | None = None,
+    dimensions: list[str] | None = None,
+    filters: list[dict[str, Any]] | None = None,
+    sort: list[dict[str, Any]] | None = None,
+    page_limit: int = 1000,
+    timeout: float = 60.0,
+) -> dict[str, Any]:
+    """Аналитика за один календарный день (``date_from`` = ``date_to``)."""
+    return get_sales_for_period(
+        day,
+        day,
+        metrics=metrics,
+        dimensions=dimensions,
+        filters=filters,
+        sort=sort,
+        page_limit=page_limit,
+        timeout=timeout,
+    )
 
 
 def get_ozon_cabinet_info() -> str:
