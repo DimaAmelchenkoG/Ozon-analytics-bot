@@ -1,10 +1,12 @@
 """Клиент Ozon Seller API: аналитика продаж (аналог отчёта «Моя аналитика» → «Продажи моих товаров»)."""
 
+import calendar
 import os
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 import httpx
+from zoneinfo import ZoneInfo
 
 
 def _ozon_client_config() -> tuple[str, str, str]:
@@ -120,6 +122,37 @@ def get_sales_for_period(
         "rows": all_rows,
         "totals": totals,
     }
+
+
+def today_in_sales_tz() -> date:
+    """Сегодняшняя дата в поясе ``OZON_SALES_TZ`` (по умолчанию Europe/Moscow)."""
+    tz = ZoneInfo(os.getenv("OZON_SALES_TZ", "Europe/Moscow"))
+    return datetime.now(tz).date()
+
+
+def same_day_previous_month(d: date) -> date:
+    """Тот же календарный день в прошлом месяце (день режется до max дней в месяце)."""
+    if d.month == 1:
+        y, m = d.year - 1, 12
+    else:
+        y, m = d.year, d.month - 1
+    last_day = calendar.monthrange(y, m)[1]
+    return date(y, m, min(d.day, last_day))
+
+
+def rolling_month_window_to_today(reference: date | None = None) -> tuple[date, date]:
+    """Интервал [тот же день прошлого месяца; reference]. ``reference`` по умолчанию — сегодня в sales TZ."""
+    end = reference if reference is not None else today_in_sales_tz()
+    start = same_day_previous_month(end)
+    return start, end
+
+
+def get_sales_rolling_month_to_today(
+    reference: date | None = None,
+) -> dict[str, Any]:
+    """Аналитика за скользящее окно «месяц до сегодня» (как в тестовом сервере)."""
+    start, end = rolling_month_window_to_today(reference)
+    return get_sales_for_period(start, end)
 
 
 def get_sales_for_day(
