@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from services.llm import ask_llm
 from services.ozon_api import get_sales_rolling_month_to_today
 from services.sales_context import format_ozon_analytics_for_llm
+from services.ozon_storage import store_ozon_report
 
 
 app = FastAPI(title="Ozon Analytics Backend MVP")
@@ -67,14 +68,25 @@ async def llm_test() -> dict[str, str]:
 
 @app.post("/ask", response_model=AskResponse)
 async def ask(request: AskRequest) -> AskResponse:
+    db_error: str | None = None
     try:
         report = get_sales_rolling_month_to_today()
+        try:
+            report_id, sales_rows_count = store_ozon_report(report, source="server.ask")
+            print(
+                "Ozon DB write ok: "
+                f"report_id={report_id}, sales_rows={sales_rows_count}",
+            )
+        except Exception as exc:
+            db_error = str(exc)
         data_block_llm = format_ozon_analytics_for_llm(report)
         data_block_full = format_ozon_analytics_for_llm(report, max_detail_rows=0)
     except Exception as exc:
         msg = f"(Ошибка загрузки данных Ozon: {exc})"
         data_block_llm = msg
         data_block_full = msg
+    if db_error:
+        print(f"Ozon DB write failed: {db_error}")
 
     _write_text(_OZON_REPORT_FULL_SNAPSHOT, data_block_full)
     _write_text(_OZON_REPORT_LLM_SNAPSHOT, data_block_llm)

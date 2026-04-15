@@ -32,6 +32,8 @@ pip install -r requirements.txt
    - `LLM_API_KEY`
    - `LLM_MODEL` (например `gpt-4o-mini`)
    - `LLM_BASE_URL` (по умолчанию `https://api.openai.com/v1`)
+8. Для локального хранения выгрузок Ozon в SQLite:
+   - `OZON_DB_PATH` (по умолчанию `var/ozon_analytics.db`)
 
 ## 3) Запуск backend (окно терминала #1)
 
@@ -77,4 +79,8 @@ pip install -r requirements.txt
 - После каждого `POST /ask` в каталог пишутся два файла:
   - **`var/last_ozon_llm_report_full.txt`** — полный текст отчёта (детализация без обрезки; путь: `OZON_REPORT_FULL_SNAPSHOT`)
   - **`var/last_ozon_llm_report.txt`** — тот же отчёт **в объёме, который реально отправляется в нейросеть** (лимит `LLM_OZON_MAX_DETAIL_ROWS`; путь: `OZON_LLM_REPORT_SNAPSHOT`)
+- После каждого `POST /ask` сырая выгрузка Ozon также пишется в SQLite БД `OZON_DB_PATH`:
+  - `ozon_analytics_reports` — запись по каждому запросу (период, время запроса, число строк, JSON отчёта)
+  - `ozon_sales` — отдельная запись по каждой строке `report.rows` (конкретная дата `sale_date`, `quantity_sold`, `unit_price`, `sale_amount`, SKU, название товара и raw JSON полей)
+  - синхронизация `ozon_sales`: добавляются только даты, которых ещё нет в таблице; для самой поздней даты, уже существующей в таблице, строки за этот день полностью перезаписываются
 
