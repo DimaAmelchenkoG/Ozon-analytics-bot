@@ -34,6 +34,12 @@ pip install -r requirements.txt
    - `LLM_BASE_URL` (по умолчанию `https://api.openai.com/v1`)
 8. Для локального хранения выгрузок Ozon в SQLite:
    - `OZON_DB_PATH` (по умолчанию `var/ozon_analytics.db`)
+9. Для выгрузки аналитики продвижения (Performance API):
+   - `OZON_PERFORMANCE_CLIENT_ID`
+   - `OZON_PERFORMANCE_CLIENT_SECRET`
+   - `OZON_PERFORMANCE_BASE_URL` (по умолчанию `https://api-performance.ozon.ru`)
+   - `OZON_PERFORMANCE_OUTPUT_DIR` (по умолчанию `var`)
+   - `OZON_PERFORMANCE_REPORT_DAY` (дата отчёта `YYYY-MM-DD`, по умолчанию `2026-04-14`)
 
 ## 3) Запуск backend (окно терминала #1)
 
@@ -83,4 +89,15 @@ pip install -r requirements.txt
   - `ozon_analytics_reports` — запись по каждому запросу (период, время запроса, число строк, JSON отчёта)
   - `ozon_sales` — отдельная запись по каждой строке `report.rows` (конкретная дата `sale_date`, `quantity_sold`, `unit_price`, `sale_amount`, SKU, название товара и raw JSON полей)
   - синхронизация `ozon_sales`: добавляются только даты, которых ещё нет в таблице; для самой поздней даты, уже существующей в таблице, строки за этот день полностью перезаписываются
+- После каждого `POST /ask` backend также запрашивает Performance API:
+  - берёт только активные кампании (`CAMPAIGN_STATE_RUNNING`)
+  - запускает отчёт (получает `UUID`) за дату `OZON_PERFORMANCE_REPORT_DAY`
+  - ждёт готовность отчёта по `UUID`
+  - скачивает финальные данные отчёта
+  - сохраняет отчёт в `var` в файлы:
+    - `ozon_performance_YYYY-MM-DD.json`
+    - `ozon_performance_YYYY-MM-DD.csv`
+    - `ozon_performance_YYYY-MM-DD.xlsx`
+    - (если доступно в API) нативные выгрузки: `ozon_performance_YYYY-MM-DD_raw.csv/.xlsx`
+    - и копии `ozon_performance_latest.*`
 
