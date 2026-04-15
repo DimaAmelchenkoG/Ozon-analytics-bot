@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from services.llm import ask_llm
 from services.ozon_api import get_sales_rolling_month_to_today
-from services.performance_api import fetch_and_save_today_performance_reports
+# from services.performance_api import fetch_and_save_today_performance_reports
 from services.sales_context import format_ozon_analytics_for_llm
 from services.ozon_storage import store_ozon_report
 
@@ -70,7 +70,7 @@ async def llm_test() -> dict[str, str]:
 @app.post("/ask", response_model=AskResponse)
 async def ask(request: AskRequest) -> AskResponse:
     db_error: str | None = None
-    performance_error: str | None = None
+    # performance_error: str | None = None
     try:
         report = get_sales_rolling_month_to_today()
         try:
@@ -89,13 +89,14 @@ async def ask(request: AskRequest) -> AskResponse:
         data_block_full = msg
     if db_error:
         print(f"Ozon DB write failed: {db_error}")
-    try:
-        performance_files = fetch_and_save_today_performance_reports()
-        print(f"Ozon performance report saved: {performance_files}")
-    except Exception as exc:
-        performance_error = str(exc)
-    if performance_error:
-        print(f"Ozon performance report failed: {performance_error}")
+    # Performance API temporarily disabled:
+    # try:
+    #     performance_files = fetch_and_save_today_performance_reports()
+    #     print(f"Ozon performance report saved: {performance_files}")
+    # except Exception as exc:
+    #     performance_error = str(exc)
+    # if performance_error:
+    #     print(f"Ozon performance report failed: {performance_error}")
 
     _write_text(_OZON_REPORT_FULL_SNAPSHOT, data_block_full)
     _write_text(_OZON_REPORT_LLM_SNAPSHOT, data_block_llm)
