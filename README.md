@@ -101,3 +101,15 @@ pip install -r requirements.txt
     - (если доступно в API) нативные выгрузки: `ozon_performance_YYYY-MM-DD_raw.csv/.xlsx`
     - и копии `ozon_performance_latest.*`
 
+## Утилиты
+
+### Конвертация остатков в Excel
+
+Если у вас есть файл `var/ozon_stock_on_warehouses_latest.json`, его можно быстро преобразовать в Excel:
+
+```bash
+.\.venv\Scripts\python.exe tools\convert_stock_json_to_xlsx.py var\ozon_stock_on_warehouses_latest.json
+```
+
+Рядом появится файл `var/ozon_stock_on_warehouses_latest.xlsx`.
+

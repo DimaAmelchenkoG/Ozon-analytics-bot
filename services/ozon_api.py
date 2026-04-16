@@ -199,3 +199,170 @@ def get_ozon_cabinet_info() -> str:
     offer_id = first_item.get("offer_id", "unknown")
     product_id = first_item.get("product_id", "unknown")
     return f"Товаров в кабинете: {total}. Первый товар: offer_id={offer_id}, product_id={product_id}"
+
+
+def get_cluster_list(*, cluster_types: list[int] | None = None, timeout: float = 30.0) -> dict[str, Any]:
+    """Информация о кластерах и их складах (FBO) через ``/v1/cluster/list``.
+
+    endpoint принимает параметр ``cluster_type`` как число.
+    """
+    client_id, api_key, base_url = _ozon_client_config()
+    url = f"{base_url}/v1/cluster/list"
+    headers = _ozon_headers(client_id, api_key)
+    types = cluster_types or [1, 2]
+
+    results: list[dict[str, Any]] = []
+    for ct in types:
+        response = httpx.post(url, headers=headers, json={"cluster_type": ct}, timeout=timeout)
+        # На всякий случай: GET обычно не работает (405), но оставляем попытку, если POST внезапно не поддерживается.
+        if response.status_code in (400, 404, 405):
+            response = httpx.get(url, headers=headers, timeout=timeout)
+        response.raise_for_status()
+        results.append({"cluster_type": ct, "data": response.json()})
+
+    return {"cluster_types": types, "results": results}
+
+
+def get_analytics_stocks(
+    *,
+    skus: list[int] | None = None,
+    warehouse_type: str = "ALL",
+    limit: int = 1000,
+    offset: int = 0,
+    timeout: float = 60.0,
+) -> dict[str, Any]:
+    """Остатки по складам (AnalyticsAPI_AnalyticsStocks).
+
+    Docs: операция ``AnalyticsAPI_AnalyticsStocks`` в Seller API.
+    На практике endpoint: ``POST /v1/analytics/stocks``.
+    """
+    client_id, api_key, base_url = _ozon_client_config()
+    url = f"{base_url}/v1/analytics/stocks"
+    headers = _ozon_headers(client_id, api_key)
+
+    if not skus:
+        raise ValueError("AnalyticsStocksRequest requires skus (1..100 items)")
+    if not (1 <= len(skus) <= 100):
+        raise ValueError("AnalyticsStocksRequest.skus must contain between 1 and 100 items")
+
+    payload: dict[str, Any] = {
+        "skus": skus,
+        "warehouse_type": warehouse_type,
+        "limit": max(1, min(int(limit), 1000)),
+        "offset": max(0, int(offset)),
+    }
+    response = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+    response.raise_for_status()
+    return response.json()
+
+
+def list_skus_from_product_info_stocks(
+    *,
+    limit: int = 1000,
+    timeout: float = 60.0,
+) -> list[int]:
+    """Возвращает список SKU из ``POST /v4/product/info/stocks`` (страницами по cursor)."""
+    client_id, api_key, base_url = _ozon_client_config()
+    url = f"{base_url}/v4/product/info/stocks"
+    headers = _ozon_headers(client_id, api_key)
+
+    cursor = ""
+    all_skus: set[int] = set()
+    page_limit = max(1, min(int(limit), 1000))
+
+    while True:
+        payload: dict[str, Any] = {
+            "filter": {"visibility": "ALL"},
+            "limit": page_limit,
+            "cursor": cursor,
+        }
+        response = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+        response.raise_for_status()
+        body = response.json()
+        items = body.get("items") if isinstance(body, dict) else None
+        if not isinstance(items, list):
+            break
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            for st in it.get("stocks") or []:
+                if isinstance(st, dict) and st.get("sku") is not None:
+                    try:
+                        all_skus.add(int(st["sku"]))
+                    except Exception:
+                        pass
+        cursor = str(body.get("cursor") or "")
+        if not cursor or len(items) < page_limit:
+            break
+
+    return sorted(all_skus)
+
+
+def get_analytics_stocks_all(
+    *,
+    warehouse_type: str = "ALL",
+    timeout: float = 60.0,
+) -> dict[str, Any]:
+    """Выкачивает ``/v1/analytics/stocks`` по всем SKU (батчами по 100)."""
+    skus = list_skus_from_product_info_stocks(timeout=timeout)
+    all_items: list[dict[str, Any]] = []
+    for i in range(0, len(skus), 100):
+        chunk = skus[i : i + 100]
+        resp = get_analytics_stocks(
+            skus=chunk,
+            warehouse_type=warehouse_type,
+            limit=1000,
+            offset=0,
+            timeout=timeout,
+        )
+        items = resp.get("items") if isinstance(resp, dict) else None
+        if isinstance(items, list):
+            all_items.extend([x for x in items if isinstance(x, dict)])
+    return {"warehouse_type": warehouse_type, "skus_count": len(skus), "items": all_items, "count": len(all_items)}
+
+
+def get_stock_on_warehouses_v2(
+    *,
+    warehouse_type: str = "ALL",
+    page_limit: int = 1000,
+    timeout: float = 60.0,
+) -> dict[str, Any]:
+    """Остатки по складам Ozon (FBO) через ``POST /v2/analytics/stock_on_warehouses``.
+
+    Возвращает строки по SKU и складу: ``warehouse_name``, ``free_to_sell_amount``,
+    ``reserved_amount``, ``promised_amount`` и др.
+    """
+    client_id, api_key, base_url = _ozon_client_config()
+    url = f"{base_url}/v2/analytics/stock_on_warehouses"
+    headers = _ozon_headers(client_id, api_key)
+
+    limit = max(1, min(int(page_limit), 1000))
+    offset = 0
+    all_rows: list[dict[str, Any]] = []
+
+    while True:
+        payload: dict[str, Any] = {
+            "warehouse_type": warehouse_type,
+            "limit": limit,
+            "offset": offset,
+        }
+        response = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+        response.raise_for_status()
+        body = response.json()
+        result = body.get("result") if isinstance(body, dict) else None
+        rows = []
+        if isinstance(result, dict):
+            rows = result.get("rows") or []
+        if not isinstance(rows, list):
+            rows = []
+        chunk = [r for r in rows if isinstance(r, dict)]
+        all_rows.extend(chunk)
+        if len(chunk) < limit:
+            break
+        offset += limit
+
+    return {
+        "warehouse_type": warehouse_type,
+        "rows": all_rows,
+        "count": len(all_rows),
+    }
